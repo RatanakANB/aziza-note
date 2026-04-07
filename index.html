@@ -104,10 +104,18 @@
   }
   @media(max-width:767px){#fab{display:flex;}}
 
-  /* ── Kanban horizontal scroll on mobile ── */
-  @media(max-width:767px){
-    #kanban-cols-wrapper{display:flex;overflow-x:auto;gap:.75rem;padding-bottom:1rem;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;}
-    .kanban-col-wrap{min-width:80vw;scroll-snap-align:start;flex-shrink:0;}
+  /* ── Kanban: always vertical stack, side-by-side only on md+ ── */
+  #kanban-cols-wrapper{
+    display:flex;
+    flex-direction:column;
+    gap:1rem;
+  }
+  @media(min-width:768px){
+    #kanban-cols-wrapper{
+      flex-direction:row;
+      align-items:flex-start;
+    }
+    .kanban-col-wrap{flex:1;min-width:0;}
   }
 
   /* ── Safe area header ── */
@@ -262,7 +270,7 @@
 
       <!-- Kanban View -->
       <div id="kanban-view" class="hidden">
-        <div id="kanban-cols-wrapper" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div id="kanban-cols-wrapper">
 
           <div class="kanban-col-wrap flex flex-col">
             <div class="flex items-center justify-between mb-3">
@@ -616,11 +624,9 @@ function switchMode(mode){
   document.getElementById('sb-create-note-wrap').classList.toggle('hidden',mode!=='notes');
   document.getElementById('btn-mode-notes').classList.toggle('bg-vault-700/60',mode==='notes');
   document.getElementById('btn-mode-kanban').classList.toggle('bg-vault-700/60',mode==='kanban');
-  // Bottom nav highlight
   const bn=document.getElementById('bnav-notes'),bk=document.getElementById('bnav-kanban');
   bn.classList.toggle('text-vault-300',mode==='notes');bn.classList.toggle('text-vault-600',mode!=='notes');
   bk.classList.toggle('text-vault-300',mode==='kanban');bk.classList.toggle('text-vault-600',mode!=='kanban');
-  // FAB
   document.getElementById('fab').style.display=mode==='notes'?'flex':'none';
   updateHeaderLabel();
   if(mode==='notes')renderNotes();else renderKanban();
