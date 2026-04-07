@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MemoVault</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: { display: ['Fraunces','serif'], body: ['DM Sans','sans-serif'] },
+        colors: {
+          vault: { 50:'#fdf6ee', 100:'#f9e8d0', 200:'#f2ca99', 300:'#e9a45f', 400:'#df8030', 500:'#c96420', 600:'#a84d18', 700:'#863b17', 800:'#6d3018', 900:'#5a2817' },
+          ink: { 50:'#f5f4f2', 100:'#e8e5df', 200:'#d1cbbf', 300:'#b4aa97', 400:'#958879', 500:'#7b6d5e', 600:'#64584b', 700:'#52473c', 800:'#3d342b', 900:'#261e17' }
+        }
+      }
+    }
+  }
+</script>
+<style>
+  * { font-family: 'DM Sans', sans-serif; }
+  h1, h2, .font-display { font-family: 'Fraunces', serif; }
+  body { background: #f5f4f2; }
+  .dark body { background: #1a1410; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d1cbbf; border-radius: 99px; }
+  .dark ::-webkit-scrollbar-thumb { background: #52473c; }
+
+  /* Sidebar */
+  #sidebar { width: 280px; min-width: 280px; background: #261e17; }
+  .dark #sidebar { background: #1a1008; }
+
+  /* Card hover */
+  .note-card { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+  .note-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(38,30,23,0.13); }
+
+  /* Kanban drag */
+  .kanban-col { min-height: 200px; }
+  .dragging { opacity: 0.4; }
+  .drag-over { background: rgba(201,100,32,0.08); border: 2px dashed #c96420 !important; }
+
+  /* Modal backdrop */
+  .modal-backdrop { background: rgba(38,30,23,0.55); backdrop-filter: blur(4px); }
+
+  /* Animated gradient logo */
+  .logo-gradient { background: linear-gradient(135deg, #e9a45f, #c96420, #df8030); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+  /* Category pill */
+  .cat-pill { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+
+  /* Smooth transitions */
+  #main-area { transition: opacity 0.18s ease; }
+
+  /* Khmer font fallback */
+  .khmer { font-family: 'Noto Sans Khmer', 'Khmer OS', sans-serif; }
+
+  /* Status badge */
+  .badge-todo { background:#fef3c7; color:#92400e; }
+  .badge-doing { background:#dbeafe; color:#1e40af; }
+  .badge-done { background:#d1fae5; color:#065f46; }
+  .dark .badge-todo { background:#451a03; color:#fcd34d; }
+  .dark .badge-doing { background:#1e3a5f; color:#93c5fd; }
+  .dark .badge-done { background:#064e3b; color:#6ee7b7; }
+
+  /* Input focus */
+  input:focus, textarea:focus, select:focus { outline: none; box-shadow: 0 0 0 2px #c96420; }
+
+  /* Btn primary */
+  .btn-primary { background: linear-gradient(135deg, #df8030, #c96420); color: white; transition: opacity 0.15s; }
+  .btn-primary:hover { opacity: 0.88; }
+
+  /* Empty state illustration */
+  .empty-state { opacity: 0.45; }
+
+  /* Search highlight */
+  mark { background: #f9e8d0; color: #a84d18; border-radius: 2px; }
+  .dark mark { background: #52311a; color: #f2ca99; }
+</style>
+</head>
+<body class="dark:bg-ink-900 text-ink-900 dark:text-ink-50 transition-colors duration-200 h-screen overflow-hidden">
+
+<!-- App Shell -->
+<div class="flex h-screen overflow-hidden">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar" class="flex flex-col h-full shrink-0 overflow-y-auto py-6 px-5 z-20">
+    <!-- Logo -->
+    <div class="mb-8">
+      <h1 class="font-display text-2xl font-black logo-gradient tracking-tight">MemoVault</h1>
+      <p class="text-xs text-ink-400 mt-0.5" id="sb-tagline">Your thoughts, organized.</p>
+    </div>
+
+    <!-- Mode Selector (logged in only) -->
+    <div id="mode-selector" class="hidden mb-6">
+      <p class="text-xs font-semibold uppercase tracking-widest text-ink-400 mb-2" id="sb-mode-label">Mode</p>
+      <div class="flex rounded-xl overflow-hidden border border-vault-700/40">
+        <button id="btn-mode-notes" onclick="switchMode('notes')"
+          class="flex-1 py-2 text-xs font-semibold transition-colors duration-150 text-vault-300 bg-vault-800/40 hover:bg-vault-700/40" id="btn-mode-notes">
+          <span id="lbl-mode-notes">Normal Notes</span>
+        </button>
+        <button id="btn-mode-kanban" onclick="switchMode('kanban')"
+          class="flex-1 py-2 text-xs font-semibold transition-colors duration-150 text-vault-300 bg-transparent hover:bg-vault-700/40">
+          <span id="lbl-mode-kanban">Kanban</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Create Note Button -->
+    <div id="sb-create-note-wrap" class="mb-3">
+      <button onclick="openCreateNoteModal()" class="btn-primary w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        <span id="lbl-create-note">Create Note</span>
+      </button>
+    </div>
+
+    <!-- Manage Categories -->
+    <button onclick="openCategoriesModal()" class="w-full mb-6 py-2 px-3 rounded-xl text-xs font-semibold text-vault-300 border border-vault-700/40 hover:bg-vault-800/40 transition-colors flex items-center gap-2">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+      <span id="lbl-manage-cats">Manage Categories</span>
+    </button>
+
+    <div class="flex-1"></div>
+
+    <!-- Language Switcher -->
+    <div class="mb-4">
+      <p class="text-xs font-semibold uppercase tracking-widest text-ink-500 mb-2" id="sb-lang-label">Language</p>
+      <div class="flex gap-2">
+        <button onclick="setLang('en')" id="btn-lang-en" class="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-vault-700/40 text-vault-300 hover:bg-vault-800/40 transition-colors">EN</button>
+        <button onclick="setLang('km')" id="btn-lang-km" class="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-vault-700/40 text-vault-300 hover:bg-vault-800/40 transition-colors">ខ្មែរ</button>
+      </div>
+    </div>
+
+    <!-- Theme Switcher -->
+    <div class="mb-6">
+      <p class="text-xs font-semibold uppercase tracking-widest text-ink-500 mb-2" id="sb-theme-label">Theme</p>
+      <div class="flex gap-2">
+        <button onclick="setTheme('light')" id="btn-theme-light" class="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-vault-700/40 text-vault-300 hover:bg-vault-800/40 transition-colors flex items-center justify-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="5"/><path stroke-linecap="round" d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <span id="lbl-theme-light">Light</span>
+        </button>
+        <button onclick="setTheme('dark')" id="btn-theme-dark" class="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-vault-700/40 text-vault-300 hover:bg-vault-800/40 transition-colors flex items-center justify-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+          <span id="lbl-theme-dark">Dark</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Login/Logout -->
+    <!-- About Section -->
+    <div class="mb-4 border border-vault-800/60 rounded-2xl p-3.5 bg-vault-900/30">
+      <p class="text-xs font-semibold uppercase tracking-widest text-vault-400 mb-3 flex items-center gap-1.5">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        About
+      </p>
+      <!-- Students -->
+      <p class="text-xs text-vault-500 mb-1.5 font-medium">Students</p>
+      <div class="space-y-1.5 mb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-5 h-5 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-xs font-bold shrink-0">R</div>
+          <span class="text-xs text-vault-200 font-medium">Reaksa</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-5 h-5 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold shrink-0">K</div>
+          <span class="text-xs text-vault-200 font-medium">Kanchana</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-5 h-5 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">M</div>
+          <span class="text-xs text-vault-200 font-medium">Mayura</span>
+        </div>
+      </div>
+      <!-- Divider -->
+      <div class="border-t border-vault-800/60 my-2"></div>
+      <!-- Mentor -->
+      <p class="text-xs text-vault-500 mb-1.5 font-medium">Mentor</p>
+      <div class="flex items-center gap-2">
+        <div class="w-5 h-5 rounded-full bg-gradient-to-br from-vault-400 to-vault-600 flex items-center justify-center text-white text-xs font-bold shrink-0">K</div>
+        <span class="text-xs text-vault-200 font-medium">Keomonnyratanak</span>
+      </div>
+    </div>
+
+    <div id="sb-auth" class="border-t border-vault-800 pt-4">
+      <div id="sb-guest" class="">
+        <button onclick="openLoginModal()" class="w-full btn-primary py-2.5 rounded-xl text-sm font-semibold">
+          <span id="lbl-login">Login / Sign Up</span>
+        </button>
+      </div>
+      <div id="sb-user" class="hidden">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-8 h-8 rounded-full btn-primary flex items-center justify-center text-sm font-bold" id="sb-avatar">U</div>
+          <div>
+            <p class="text-xs font-semibold text-vault-200" id="sb-username">User</p>
+            <p class="text-xs text-ink-400" id="lbl-logged-in">Logged in</p>
+          </div>
+        </div>
+        <button onclick="logout()" class="w-full py-2 rounded-xl text-xs font-semibold border border-vault-700/40 text-vault-300 hover:bg-vault-800/40 transition-colors">
+          <span id="lbl-logout">Logout</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN AREA -->
+  <div class="flex flex-col flex-1 overflow-hidden">
+    <!-- Top Header -->
+    <header class="bg-white dark:bg-ink-800 border-b border-ink-100 dark:border-ink-700 px-6 py-4 flex items-center gap-4 shrink-0">
+      <div class="flex-1">
+        <div class="relative max-w-md">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="m21 21-4.35-4.35"/></svg>
+          <input id="search-input" type="text" oninput="handleSearch()" placeholder="Search notes..." 
+            class="w-full pl-9 pr-4 py-2 rounded-xl bg-ink-50 dark:bg-ink-700 border border-ink-200 dark:border-ink-600 text-sm placeholder-ink-400 transition-colors"/>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-ink-400 hidden sm:block" id="header-mode-label">Notes</span>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main id="main-area" class="flex-1 overflow-y-auto p-6">
+      <!-- Notes Grid -->
+      <div id="notes-view">
+        <div id="notes-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+        <div id="notes-empty" class="hidden flex flex-col items-center justify-center py-24 empty-state">
+          <svg class="w-16 h-16 text-ink-300 mb-4" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <p class="font-display text-xl font-semibold text-ink-400 mb-1" id="empty-notes-title">No notes yet</p>
+          <p class="text-sm text-ink-400" id="empty-notes-sub">Create your first note to get started.</p>
+        </div>
+      </div>
+
+      <!-- Kanban Board -->
+      <div id="kanban-view" class="hidden">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <!-- Todo -->
+          <div class="flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>
+                <h3 class="font-display font-semibold text-sm" id="col-todo-title">Todo</h3>
+                <span id="count-todo" class="text-xs bg-ink-100 dark:bg-ink-700 text-ink-500 rounded-full px-2 py-0.5 font-mono">0</span>
+              </div>
+              <button onclick="openCreateKanbanModal('todo')" class="text-vault-500 hover:text-vault-400 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              </button>
+            </div>
+            <div id="col-todo" ondragover="handleDragOver(event)" ondrop="handleDrop(event,'todo')" ondragleave="handleDragLeave(event)"
+              class="kanban-col flex flex-col gap-3 bg-ink-50 dark:bg-ink-800/50 rounded-2xl p-3 border border-ink-100 dark:border-ink-700 flex-1"></div>
+          </div>
+          <!-- Doing -->
+          <div class="flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block"></span>
+                <h3 class="font-display font-semibold text-sm" id="col-doing-title">Doing</h3>
+                <span id="count-doing" class="text-xs bg-ink-100 dark:bg-ink-700 text-ink-500 rounded-full px-2 py-0.5 font-mono">0</span>
+              </div>
+              <button onclick="openCreateKanbanModal('doing')" class="text-vault-500 hover:text-vault-400 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              </button>
+            </div>
+            <div id="col-doing" ondragover="handleDragOver(event)" ondrop="handleDrop(event,'doing')" ondragleave="handleDragLeave(event)"
+              class="kanban-col flex flex-col gap-3 bg-ink-50 dark:bg-ink-800/50 rounded-2xl p-3 border border-ink-100 dark:border-ink-700 flex-1"></div>
+          </div>
+          <!-- Done -->
+          <div class="flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>
+                <h3 class="font-display font-semibold text-sm" id="col-done-title">Done</h3>
+                <span id="count-done" class="text-xs bg-ink-100 dark:bg-ink-700 text-ink-500 rounded-full px-2 py-0.5 font-mono">0</span>
+              </div>
+              <button onclick="openCreateKanbanModal('done')" class="text-vault-500 hover:text-vault-400 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              </button>
+            </div>
+            <div id="col-done" ondragover="handleDragOver(event)" ondrop="handleDrop(event,'done')" ondragleave="handleDragLeave(event)"
+              class="kanban-col flex flex-col gap-3 bg-ink-50 dark:bg-ink-800/50 rounded-2xl p-3 border border-ink-100 dark:border-ink-700 flex-1"></div>
+          </div>
+        </div>
+        <div id="kanban-empty" class="hidden flex flex-col items-center justify-center py-20 empty-state">
+          <svg class="w-14 h-14 text-ink-300 mb-3" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <p class="font-display text-xl font-semibold text-ink-400 mb-1" id="empty-kanban-title">No tasks yet</p>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ========================= MODALS ========================= -->
+
+<!-- Login Modal -->
+<div id="modal-login" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+  <div class="bg-white dark:bg-ink-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-ink-100 dark:border-ink-700">
+    <h2 class="font-display text-xl font-bold mb-1" id="login-title">Welcome back</h2>
+    <p class="text-sm text-ink-500 mb-5" id="login-sub">Enter your credentials. New username = new account.</p>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-semibold text-ink-500 mb-1 block" id="lbl-field-user">Username</label>
+        <input id="login-username" type="text" class="w-full px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-600 bg-ink-50 dark:bg-ink-700 text-sm" placeholder="e.g. john_doe"/>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-ink-500 mb-1 block" id="lbl-field-pass">Password</label>
+        <input id="login-password" type="password" class="w-full px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-600 bg-ink-50 dark:bg-ink-700 text-sm" placeholder="••••••••"/>
+      </div>
+    </div>
+    <p id="login-error" class="text-xs text-red-500 mt-2 hidden"></p>
+    <div class="flex gap-3 mt-5">
+      <button onclick="closeModal('modal-login')" class="flex-1 py-2.5 rounded-xl border border-ink-200 dark:border-ink-600 text-sm font-semibold hover:bg-ink-50 dark:hover:bg-ink-700 transition-colors" id="lbl-cancel">Cancel</button>
+      <button onclick="doLogin()" class="flex-1 btn-primary py-2.5 rounded-xl text-sm font-semibold" id="lbl-login-btn">Login / Sign Up</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create/Edit Note Modal -->
+<div id="modal-note" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+  <div class="bg-white dark:bg-ink-800 rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-ink-100 dark:border-ink-700">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-xl font-bold" id="modal-note-title">New Note</h2>
+      <button onclick="closeModal('modal-note')" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-ink-100 dark:hover:bg-ink-700 text-ink-400 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-semibold text-ink-500 mb-1 block" id="lbl-note-title-field">Title</label>
+        <input id="note-title-input" type="text" class="w-full px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-600 bg-ink-50 dark:bg-ink-700 text-sm" placeholder="Note title..."/>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-ink-500 mb-1 block" id="lbl-note-cat-field">Category</label>
+        <select id="note-cat-select" class="w-full px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-600 bg-ink-50 dark:bg-ink-700 text-sm"></select>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-ink-500 mb-1 block" id="lbl-note-desc-field">Description</label>
+        <textarea id="note-desc-input" rows="4" class="w-full px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-600 bg-ink-50 dark:bg-ink-700 text-sm resize-none" placeholder="Write your note..."></textarea>
+      </div>
+    </div>
+    <input type="hidden" id="note-editing-id"/>
+    <div class="flex gap-3 mt-5">
+      <button onclick="closeModal('modal-note')" class="flex-1 py-2.5 rounded-xl border border-ink-200 dark:border-ink-600 text-sm font-semibold hover:bg-ink-50 dark:hover:bg-ink-700 transition-colors" id="lbl-note-cancel">Cancel</button>
+      <button id="note-delete-btn" onclick="deleteNoteFromModal()" class="hidden py-2.5 px-4 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm font-semibold hover:bg-red-100 transition-colors" id="lbl-note-delete">Delete</button>
+      <button onclick="saveNote()" class="flex-1 btn-primary py-2.5 rounded-xl text-sm font-semibold" id="lbl-note-save">Save Note</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kanban Task Modal -->
+<div id="modal-kanban" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+  <div class="bg-white dark:bg-ink-800 rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-ink-100 dark:border-ink-700">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-xl font-bold" id="modal-kanban-title">New Task</h2>
+      <button onclick="closeModal('modal-kanban')" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-ink-100 dark:hover:bg-ink-700 text-ink-400 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-semibold text-ink-500 mb-1 block" id="lbl-task-title-field">Title</label>
+        <input id="task-title-input" type="text" class="w-full px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-600 bg-ink-50 dark:bg-ink-700 text-sm" placeholder="Task title..."/>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-semibold text-ink-500 mb-1 block" id="lbl-task-status-field">Status</label>
+          <select id="task-status-select" class="w-full px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-600 bg-ink-50 dark:bg-ink-700 text-sm"></select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-ink-500 mb-1 block" id="lbl-task-cat-field">Category</label>
+          <select id="task-cat-select" class="w-full px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-600 bg-ink-50 dark:bg-ink-700 text-sm"></select>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-ink-500 mb-1 block" id="lbl-task-desc-field">Description</label>
+        <textarea id="task-desc-input" rows="3" class="w-full px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-600 bg-ink-50 dark:bg-ink-700 text-sm resize-none" placeholder="Task description..."></textarea>
+      </div>
+    </div>
+    <input type="hidden" id="task-editing-id"/>
+    <div class="flex gap-3 mt-5">
+      <button onclick="closeModal('modal-kanban')" class="flex-1 py-2.5 rounded-xl border border-ink-200 dark:border-ink-600 text-sm font-semibold hover:bg-ink-50 dark:hover:bg-ink-700 transition-colors" id="lbl-task-cancel">Cancel</button>
+      <button id="task-delete-btn" onclick="deleteTaskFromModal()" class="hidden py-2.5 px-4 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm font-semibold hover:bg-red-100 transition-colors" id="lbl-task-delete">Delete</button>
+      <button onclick="saveTask()" class="flex-1 btn-primary py-2.5 rounded-xl text-sm font-semibold" id="lbl-task-save">Save Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Categories Modal -->
+<div id="modal-cats" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+  <div class="bg-white dark:bg-ink-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-ink-100 dark:border-ink-700">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-xl font-bold" id="modal-cats-title">Manage Categories</h2>
+      <button onclick="closeModal('modal-cats')" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-ink-100 dark:hover:bg-ink-700 text-ink-400 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="cats-list" class="mb-4 space-y-1.5 max-h-52 overflow-y-auto"></div>
+    <div class="flex gap-2">
+      <input id="new-cat-input" type="text" class="flex-1 px-3 py-2 rounded-xl border border-ink-200 dark:border-ink-600 bg-ink-50 dark:bg-ink-700 text-sm" placeholder="New category..."/>
+      <button onclick="addCategory()" class="btn-primary px-4 py-2 rounded-xl text-sm font-semibold" id="lbl-add-cat">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div id="modal-confirm" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+  <div class="bg-white dark:bg-ink-800 rounded-2xl shadow-2xl w-full max-w-xs p-6 border border-ink-100 dark:border-ink-700 text-center">
+    <div class="w-12 h-12 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-3">
+      <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+    </div>
+    <h3 class="font-display font-bold text-lg mb-1" id="confirm-title">Delete?</h3>
+    <p class="text-sm text-ink-500 mb-5" id="confirm-msg">This action cannot be undone.</p>
+    <div class="flex gap-3">
+      <button onclick="closeModal('modal-confirm')" class="flex-1 py-2 rounded-xl border border-ink-200 dark:border-ink-600 text-sm font-semibold hover:bg-ink-50 dark:hover:bg-ink-700 transition-colors" id="lbl-confirm-cancel">Cancel</button>
+      <button id="confirm-ok-btn" class="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors" id="lbl-confirm-ok">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== STATE =====================
+let currentLang = localStorage.getItem('mv_lang') || 'en';
+let currentTheme = localStorage.getItem('mv_theme') || 'dark';
+let currentMode = 'notes'; // 'notes' | 'kanban'
+let searchQuery = '';
+let draggingTaskId = null;
+let confirmCallback = null;
+
+// Guest in-memory storage
+let guestNotes = [];
+let guestKanbanTasks = [];
+
+// ===================== TRANSLATIONS =====================
+const T = {
+  en: {
+    tagline: 'Your thoughts, organized.',
+    modeLabel: 'Mode', modeNotes: 'Normal Notes', modeKanban: 'Kanban',
+    createNote: '+ Create Note', manageCategories: 'Manage Categories',
+    langLabel: 'Language', themeLabel: 'Theme', themeLight: 'Light', themeDark: 'Dark',
+    login: 'Login / Sign Up', logout: 'Logout', loggedIn: 'Logged in',
+    searchPlaceholder: 'Search notes...', headerNotes: 'Notes', headerKanban: 'Kanban Board',
+    // Login modal
+    loginTitle: 'Welcome back', loginSub: 'Enter your credentials. New username = new account.',
+    fieldUser: 'Username', fieldPass: 'Password', cancel: 'Cancel', loginBtn: 'Login / Sign Up',
+    errPassWrong: 'Incorrect password.',
+    // Note modal
+    newNote: 'New Note', editNote: 'Edit Note',
+    noteTitleField: 'Title', noteCatField: 'Category', noteDescField: 'Description',
+    noteCancel: 'Cancel', noteDelete: 'Delete', noteSave: 'Save Note', noteUpdate: 'Update Note',
+    // Kanban modal
+    newTask: 'New Task', editTask: 'Edit Task',
+    taskTitleField: 'Title', taskStatusField: 'Status', taskCatField: 'Category', taskDescField: 'Description',
+    taskCancel: 'Cancel', taskDelete: 'Delete', taskSave: 'Save Task', taskUpdate: 'Update Task',
+    // Kanban columns
+    colTodo: 'Todo', colDoing: 'Doing', colDone: 'Done',
+    statusTodo: 'Todo', statusDoing: 'Doing', statusDone: 'Done',
+    // Categories modal
+    manageCategories2: 'Manage Categories', addCat: 'Add',
+    // Empty states
+    emptyNotesTitle: 'No notes yet', emptyNotesSub: 'Create your first note to get started.',
+    emptyKanban: 'No tasks yet',
+    // Confirm
+    confirmTitle: 'Delete?', confirmMsg: 'This action cannot be undone.',
+    confirmCancel: 'Cancel', confirmOk: 'Delete',
+    // Categories
+    cats: {
+      Personal:'Personal', Work:'Work', Study:'Study', Ideas:'Ideas',
+      Health:'Health', Finance:'Finance', Other:'Other'
+    }
+  },
+  km: {
+    tagline: 'គំនិតរបស់អ្នក ត្រូវបានរៀបចំ។',
+    modeLabel: 'របៀប', modeNotes: 'កំណត់ចំណាំ', modeKanban: 'កញ្ចប់ Kanban',
+    createNote: '+ បង្កើតកំណត់ចំណាំ', manageCategories: 'គ្រប់គ្រងប្រភេទ',
+    langLabel: 'ភាសា', themeLabel: 'ស្បែក', themeLight: 'ភ្លឺ', themeDark: 'ងងឹត',
+    login: 'ចូល / ចុះឈ្មោះ', logout: 'ចេញ', loggedIn: 'បានចូល',
+    searchPlaceholder: 'ស្វែងរកកំណត់ចំណាំ...', headerNotes: 'កំណត់ចំណាំ', headerKanban: 'បន្ទះ Kanban',
+    loginTitle: 'ស្វាគមន៍', loginSub: 'បញ្ចូលព័ត៌មានរបស់អ្នក។ ឈ្មោះថ្មី = គណនីថ្មី។',
+    fieldUser: 'ឈ្មោះអ្នកប្រើ', fieldPass: 'ពាក្យសម្ងាត់', cancel: 'បោះបង់', loginBtn: 'ចូល / ចុះឈ្មោះ',
+    errPassWrong: 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវ។',
+    newNote: 'កំណត់ចំណាំថ្មី', editNote: 'កែប្រែកំណត់ចំណាំ',
+    noteTitleField: 'ចំណងជើង', noteCatField: 'ប្រភេទ', noteDescField: 'ការពិពណ៌នា',
+    noteCancel: 'បោះបង់', noteDelete: 'លុប', noteSave: 'រក្សាទុក', noteUpdate: 'រក្សាទុក',
+    newTask: 'ភារកិច្ចថ្មី', editTask: 'កែប្រែភារកិច្ច',
+    taskTitleField: 'ចំណងជើង', taskStatusField: 'ស្ថានភាព', taskCatField: 'ប្រភេទ', taskDescField: 'ការពិពណ៌នា',
+    taskCancel: 'បោះបង់', taskDelete: 'លុប', taskSave: 'រក្សាទុក', taskUpdate: 'រក្សាទុក',
+    colTodo: 'ត្រូវធ្វើ', colDoing: 'កំពុងធ្វើ', colDone: 'បានធ្វើ',
+    statusTodo: 'ត្រូវធ្វើ', statusDoing: 'កំពុងធ្វើ', statusDone: 'បានធ្វើ',
+    manageCategories2: 'គ្រប់គ្រងប្រភេទ', addCat: 'បន្ថែម',
+    emptyNotesTitle: 'មិនមានកំណត់ចំណាំ', emptyNotesSub: 'បង្កើតកំណត់ចំណាំដំបូងរបស់អ្នក។',
+    emptyKanban: 'មិនមានភារកិច្ច',
+    confirmTitle: 'លុប?', confirmMsg: 'សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ។',
+    confirmCancel: 'បោះបង់', confirmOk: 'លុប',
+    cats: {
+      Personal:'ផ្ទាល់ខ្លួន', Work:'ការងារ', Study:'ការសិក្សា', Ideas:'គំនិត',
+      Health:'សុខភាព', Finance:'ហិរញ្ញវត្ថុ', Other:'ផ្សេងៗ'
+    }
+  }
+};
+
+const DEFAULT_CATS = ['Personal','Work','Study','Ideas','Health','Finance','Other'];
+
+function t(key) { return T[currentLang][key] || T['en'][key] || key; }
+function tCat(cat) { return (T[currentLang].cats && T[currentLang].cats[cat]) || cat; }
+
+// ===================== LOCAL STORAGE =====================
+function getStore() {
+  try { return JSON.parse(localStorage.getItem('mv_store')) || { users: {}, currentUser: null }; }
+  catch(e) { return { users: {}, currentUser: null }; }
+}
+function setStore(s) { localStorage.setItem('mv_store', JSON.stringify(s)); }
+
+function getCurrentUser() {
+  const s = getStore();
+  if (!s.currentUser) return null;
+  return s.users[s.currentUser] ? s.currentUser : null;
+}
+function getUserData(username) {
+  const s = getStore();
+  return s.users[username] || null;
+}
+
+function getNotes() {
+  const u = getCurrentUser();
+  if (u) return getUserData(u).notes || [];
+  return guestNotes;
+}
+function getTasks() {
+  const u = getCurrentUser();
+  if (u) return getUserData(u).kanbanTasks || [];
+  return guestKanbanTasks;
+}
+function getCustomCats() {
+  const u = getCurrentUser();
+  if (u) return getUserData(u).customCategories || [];
+  return [];
+}
+function getAllCats() { return [...DEFAULT_CATS, ...getCustomCats()]; }
+
+function saveNotes(notes) {
+  const u = getCurrentUser();
+  if (u) {
+    const s = getStore();
+    s.users[u].notes = notes;
+    setStore(s);
+  } else {
+    guestNotes = notes;
+  }
+}
+function saveTasks(tasks) {
+  const u = getCurrentUser();
+  if (u) {
+    const s = getStore();
+    s.users[u].kanbanTasks = tasks;
+    setStore(s);
+  } else {
+    guestKanbanTasks = tasks;
+  }
+}
+function saveCustomCats(cats) {
+  const u = getCurrentUser();
+  if (!u) return;
+  const s = getStore();
+  s.users[u].customCategories = cats;
+  setStore(s);
+}
+
+// ===================== AUTH =====================
+function openLoginModal() {
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-error').classList.add('hidden');
+  openModal('modal-login');
+}
+
+function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  if (!username || !password) { errEl.textContent = currentLang==='km'?'សូមបំពេញព័ត៌មាន':'Please fill in all fields.'; errEl.classList.remove('hidden'); return; }
+  const s = getStore();
+  if (s.users[username]) {
+    if (s.users[username].password !== password) {
+      errEl.textContent = t('errPassWrong');
+      errEl.classList.remove('hidden');
+      return;
+    }
+  } else {
+    // Create new user
+    s.users[username] = { password, notes: [], kanbanTasks: [], customCategories: [] };
+  }
+  s.currentUser = username;
+  setStore(s);
+  closeModal('modal-login');
+  updateAuthUI();
+  renderAll();
+}
+
+function logout() {
+  const s = getStore();
+  s.currentUser = null;
+  setStore(s);
+  guestNotes = [];
+  guestKanbanTasks = [];
+  updateAuthUI();
+  renderAll();
+}
+
+// ===================== THEME & LANG =====================
+function setTheme(theme) {
+  currentTheme = theme;
+  localStorage.setItem('mv_theme', theme);
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  updateThemeUI();
+}
+function updateThemeUI() {
+  const ld = document.getElementById('btn-theme-light');
+  const dk = document.getElementById('btn-theme-dark');
+  [ld, dk].forEach(b => b.classList.remove('bg-vault-700','text-white'));
+  const active = currentTheme === 'dark' ? dk : ld;
+  active.classList.add('bg-vault-700','text-white');
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('mv_lang', lang);
+  applyTranslations();
+  renderAll();
+}
+function applyTranslations() {
+  const setTxt = (id, key) => { const el = document.getElementById(id); if(el) el.textContent = t(key); };
+  setTxt('sb-tagline','tagline');
+  setTxt('sb-mode-label','modeLabel');
+  setTxt('lbl-mode-notes','modeNotes');
+  setTxt('lbl-mode-kanban','modeKanban');
+  setTxt('lbl-create-note','createNote');
+  setTxt('lbl-manage-cats','manageCategories');
+  setTxt('sb-lang-label','langLabel');
+  setTxt('sb-theme-label','themeLabel');
+  setTxt('lbl-theme-light','themeLight');
+  setTxt('lbl-theme-dark','themeDark');
+  setTxt('lbl-login','login');
+  setTxt('lbl-logout','logout');
+  setTxt('lbl-logged-in','loggedIn');
+  setTxt('login-title','loginTitle');
+  setTxt('login-sub','loginSub');
+  setTxt('lbl-field-user','fieldUser');
+  setTxt('lbl-field-pass','fieldPass');
+  setTxt('lbl-cancel','cancel');
+  setTxt('lbl-login-btn','loginBtn');
+  setTxt('lbl-note-title-field','noteTitleField');
+  setTxt('lbl-note-cat-field','noteCatField');
+  setTxt('lbl-note-desc-field','noteDescField');
+  setTxt('lbl-note-cancel','noteCancel');
+  setTxt('lbl-note-delete','noteDelete');
+  setTxt('lbl-task-title-field','taskTitleField');
+  setTxt('lbl-task-status-field','taskStatusField');
+  setTxt('lbl-task-cat-field','taskCatField');
+  setTxt('lbl-task-desc-field','taskDescField');
+  setTxt('lbl-task-cancel','taskCancel');
+  setTxt('lbl-task-delete','taskDelete');
+  setTxt('col-todo-title','colTodo');
+  setTxt('col-doing-title','colDoing');
+  setTxt('col-done-title','colDone');
+  setTxt('modal-cats-title','manageCategories2');
+  setTxt('lbl-add-cat','addCat');
+  setTxt('empty-notes-title','emptyNotesTitle');
+  setTxt('empty-notes-sub','emptyNotesSub');
+  setTxt('empty-kanban-title','emptyKanban');
+  setTxt('confirm-title','confirmTitle');
+  setTxt('confirm-msg','confirmMsg');
+  setTxt('lbl-confirm-cancel','confirmCancel');
+  setTxt('lbl-confirm-ok','confirmOk');
+
+  const sp = document.getElementById('search-input');
+  if (sp) sp.placeholder = t('searchPlaceholder');
+  updateHeaderLabel();
+  updateLangUI();
+}
+function updateLangUI() {
+  document.getElementById('btn-lang-en').classList.toggle('bg-vault-700', currentLang === 'en');
+  document.getElementById('btn-lang-en').classList.toggle('text-white', currentLang === 'en');
+  document.getElementById('btn-lang-km').classList.toggle('bg-vault-700', currentLang === 'km');
+  document.getElementById('btn-lang-km').classList.toggle('text-white', currentLang === 'km');
+}
+function updateHeaderLabel() {
+  const el = document.getElementById('header-mode-label');
+  if (el) el.textContent = currentMode === 'notes' ? t('headerNotes') : t('headerKanban');
+}
+
+// ===================== MODE =====================
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('notes-view').classList.toggle('hidden', mode !== 'notes');
+  document.getElementById('kanban-view').classList.toggle('hidden', mode !== 'kanban');
+  document.getElementById('sb-create-note-wrap').classList.toggle('hidden', mode !== 'notes');
+  const nb = document.getElementById('btn-mode-notes');
+  const kb = document.getElementById('btn-mode-kanban');
+  nb.classList.toggle('bg-vault-700/60', mode === 'notes');
+  kb.classList.toggle('bg-vault-700/60', mode === 'kanban');
+  updateHeaderLabel();
+  if (mode === 'notes') renderNotes();
+  else renderKanban();
+}
+
+// ===================== AUTH UI =====================
+function updateAuthUI() {
+  const u = getCurrentUser();
+  document.getElementById('sb-guest').classList.toggle('hidden', !!u);
+  document.getElementById('sb-user').classList.toggle('hidden', !u);
+  document.getElementById('mode-selector').classList.toggle('hidden', !u);
+  if (u) {
+    document.getElementById('sb-username').textContent = u;
+    document.getElementById('sb-avatar').textContent = u.charAt(0).toUpperCase();
+  }
+}
+
+// ===================== MODALS =====================
+function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+function buildCatOptions(selectId, selectedCat) {
+  const sel = document.getElementById(selectId);
+  sel.innerHTML = '';
+  getAllCats().forEach(cat => {
+    const o = document.createElement('option');
+    o.value = cat; o.textContent = tCat(cat);
+    if (cat === selectedCat) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+function buildStatusOptions(selectedStatus) {
+  const sel = document.getElementById('task-status-select');
+  sel.innerHTML = '';
+  [['todo', t('statusTodo')], ['doing', t('statusDoing')], ['done', t('statusDone')]].forEach(([v, label]) => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = label;
+    if (v === selectedStatus) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+// Create Note
+function openCreateNoteModal() {
+  document.getElementById('modal-note-title').textContent = t('newNote');
+  document.getElementById('note-title-input').value = '';
+  document.getElementById('note-desc-input').value = '';
+  document.getElementById('note-editing-id').value = '';
+  document.getElementById('note-delete-btn').classList.add('hidden');
+  document.getElementById('lbl-note-save').textContent = t('noteSave');
+  buildCatOptions('note-cat-select', 'Personal');
+  openModal('modal-note');
+}
+
+// View/Edit Note
+function openViewNoteModal(id) {
+  const notes = getNotes();
+  const note = notes.find(n => n.id == id);
+  if (!note) return;
+  document.getElementById('modal-note-title').textContent = t('editNote');
+  document.getElementById('note-title-input').value = note.title;
+  document.getElementById('note-desc-input').value = note.description || '';
+  document.getElementById('note-editing-id').value = note.id;
+  document.getElementById('note-delete-btn').classList.remove('hidden');
+  document.getElementById('lbl-note-save').textContent = t('noteUpdate');
+  buildCatOptions('note-cat-select', note.category);
+  openModal('modal-note');
+}
+
+function saveNote() {
+  const title = document.getElementById('note-title-input').value.trim();
+  if (!title) { alert(currentLang==='km'?'សូមបញ្ចូលចំណងជើង':'Please enter a title.'); return; }
+  const cat = document.getElementById('note-cat-select').value;
+  const desc = document.getElementById('note-desc-input').value.trim();
+  const editId = document.getElementById('note-editing-id').value;
+  let notes = getNotes();
+  if (editId) {
+    notes = notes.map(n => n.id == editId ? { ...n, title, category: cat, description: desc } : n);
+  } else {
+    notes.push({ id: Date.now(), title, category: cat, description: desc, createdAt: new Date().toISOString() });
+  }
+  saveNotes(notes);
+  closeModal('modal-note');
+  renderNotes();
+}
+
+function deleteNoteFromModal() {
+  const id = document.getElementById('note-editing-id').value;
+  if (!id) return;
+  closeModal('modal-note');
+  showConfirm(() => {
+    let notes = getNotes().filter(n => n.id != id);
+    saveNotes(notes);
+    renderNotes();
+  });
+}
+
+// Kanban
+function openCreateKanbanModal(status) {
+  document.getElementById('modal-kanban-title').textContent = t('newTask');
+  document.getElementById('task-title-input').value = '';
+  document.getElementById('task-desc-input').value = '';
+  document.getElementById('task-editing-id').value = '';
+  document.getElementById('task-delete-btn').classList.add('hidden');
+  document.getElementById('lbl-task-save').textContent = t('taskSave');
+  buildStatusOptions(status || 'todo');
+  buildCatOptions('task-cat-select', 'Work');
+  openModal('modal-kanban');
+}
+
+function openViewTaskModal(id) {
+  const task = getTasks().find(t => t.id == id);
+  if (!task) return;
+  document.getElementById('modal-kanban-title').textContent = t('editTask');
+  document.getElementById('task-title-input').value = task.title;
+  document.getElementById('task-desc-input').value = task.description || '';
+  document.getElementById('task-editing-id').value = task.id;
+  document.getElementById('task-delete-btn').classList.remove('hidden');
+  document.getElementById('lbl-task-save').textContent = t('taskUpdate');
+  buildStatusOptions(task.status);
+  buildCatOptions('task-cat-select', task.category || 'Work');
+  openModal('modal-kanban');
+}
+
+function saveTask() {
+  const title = document.getElementById('task-title-input').value.trim();
+  if (!title) { alert(currentLang==='km'?'សូមបញ្ចូលចំណងជើង':'Please enter a title.'); return; }
+  const status = document.getElementById('task-status-select').value;
+  const cat = document.getElementById('task-cat-select').value;
+  const desc = document.getElementById('task-desc-input').value.trim();
+  const editId = document.getElementById('task-editing-id').value;
+  let tasks = getTasks();
+  if (editId) {
+    tasks = tasks.map(t => t.id == editId ? { ...t, title, status, category: cat, description: desc } : t);
+  } else {
+    tasks.push({ id: Date.now(), title, status, category: cat, description: desc, createdAt: new Date().toISOString() });
+  }
+  saveTasks(tasks);
+  closeModal('modal-kanban');
+  renderKanban();
+}
+
+function deleteTaskFromModal() {
+  const id = document.getElementById('task-editing-id').value;
+  if (!id) return;
+  closeModal('modal-kanban');
+  showConfirm(() => {
+    let tasks = getTasks().filter(t => t.id != id);
+    saveTasks(tasks);
+    renderKanban();
+  });
+}
+
+// Categories
+function openCategoriesModal() {
+  renderCatsList();
+  openModal('modal-cats');
+}
+
+function renderCatsList() {
+  const container = document.getElementById('cats-list');
+  container.innerHTML = '';
+  const custom = getCustomCats();
+  DEFAULT_CATS.forEach(cat => {
+    const d = document.createElement('div');
+    d.className = 'flex items-center justify-between px-3 py-1.5 rounded-lg bg-ink-50 dark:bg-ink-700';
+    d.innerHTML = `<span class="text-sm">${tCat(cat)}</span><span class="text-xs text-ink-400">${currentLang==='km'?'លំនាំដើម':'default'}</span>`;
+    container.appendChild(d);
+  });
+  custom.forEach((cat, i) => {
+    const d = document.createElement('div');
+    d.className = 'flex items-center justify-between px-3 py-1.5 rounded-lg bg-ink-50 dark:bg-ink-700';
+    d.innerHTML = `<span class="text-sm">${cat}</span><button onclick="deleteCustomCat(${i})" class="text-red-400 hover:text-red-500 text-xs transition-colors">✕</button>`;
+    container.appendChild(d);
+  });
+}
+
+function addCategory() {
+  const input = document.getElementById('new-cat-input');
+  const val = input.value.trim();
+  if (!val) return;
+  if (!getCurrentUser()) { alert(currentLang==='km'?'សូមចូលដំបូង':'Please log in to add categories.'); return; }
+  const cats = getCustomCats();
+  if (!cats.includes(val) && !DEFAULT_CATS.includes(val)) {
+    cats.push(val);
+    saveCustomCats(cats);
+  }
+  input.value = '';
+  renderCatsList();
+}
+
+function deleteCustomCat(index) {
+  const cats = getCustomCats();
+  cats.splice(index, 1);
+  saveCustomCats(cats);
+  renderCatsList();
+}
+
+// Confirm
+function showConfirm(cb) {
+  confirmCallback = cb;
+  document.getElementById('confirm-ok-btn').onclick = () => { closeModal('modal-confirm'); if (confirmCallback) confirmCallback(); };
+  openModal('modal-confirm');
+}
+
+// ===================== SEARCH =====================
+function handleSearch() {
+  searchQuery = document.getElementById('search-input').value.toLowerCase().trim();
+  if (currentMode === 'notes') renderNotes();
+  else renderKanban();
+}
+
+// ===================== RENDER NOTES =====================
+const CAT_COLORS = {
+  Personal: 'bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
+  Work: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  Study: 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+  Ideas: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+  Health: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  Finance: 'bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
+  Other: 'bg-ink-50 text-ink-600 dark:bg-ink-700 dark:text-ink-300'
+};
+function getCatColor(cat) { return CAT_COLORS[cat] || 'bg-vault-50 text-vault-700 dark:bg-vault-900/30 dark:text-vault-300'; }
+
+function highlight(text, q) {
+  if (!q || !text) return text || '';
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>');
+}
+
+function renderNotes() {
+  const grid = document.getElementById('notes-grid');
+  const emptyEl = document.getElementById('notes-empty');
+  let notes = getNotes();
+  if (searchQuery) {
+    notes = notes.filter(n =>
+      n.title.toLowerCase().includes(searchQuery) ||
+      (n.description || '').toLowerCase().includes(searchQuery)
+    );
+  }
+  grid.innerHTML = '';
+  if (notes.length === 0) {
+    emptyEl.classList.remove('hidden');
+    grid.classList.add('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  grid.classList.remove('hidden');
+  notes.forEach(note => {
+    const card = document.createElement('div');
+    card.className = 'note-card bg-white dark:bg-ink-800 rounded-2xl p-4 border border-ink-100 dark:border-ink-700 cursor-pointer flex flex-col gap-3';
+    card.onclick = () => openViewNoteModal(note.id);
+    const title = highlight(note.title, searchQuery);
+    const desc = highlight((note.description || '').substring(0, 120), searchQuery);
+    const dateStr = note.createdAt ? new Date(note.createdAt).toLocaleDateString(currentLang === 'km' ? 'km-KH' : 'en-US', {month:'short',day:'numeric'}) : '';
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-2">
+        <h3 class="font-display font-semibold text-sm leading-snug flex-1">${title}</h3>
+        <span class="cat-pill px-2 py-0.5 rounded-full shrink-0 ${getCatColor(note.category)}">${tCat(note.category)}</span>
+      </div>
+      ${desc ? `<p class="text-xs text-ink-500 dark:text-ink-400 leading-relaxed line-clamp-3">${desc}</p>` : ''}
+      <div class="flex items-center justify-between mt-auto pt-1">
+        <span class="text-xs text-ink-400">${dateStr}</span>
+        <svg class="w-3.5 h-3.5 text-ink-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ===================== RENDER KANBAN =====================
+function renderKanban() {
+  let tasks = getTasks();
+  if (searchQuery) {
+    tasks = tasks.filter(t =>
+      t.title.toLowerCase().includes(searchQuery) ||
+      (t.description || '').toLowerCase().includes(searchQuery)
+    );
+  }
+  const cols = { todo: [], doing: [], done: [] };
+  tasks.forEach(t => { if (cols[t.status]) cols[t.status].push(t); });
+
+  ['todo','doing','done'].forEach(status => {
+    const col = document.getElementById(`col-${status}`);
+    const count = document.getElementById(`count-${status}`);
+    col.innerHTML = '';
+    count.textContent = cols[status].length;
+    if (cols[status].length === 0) {
+      const ep = document.createElement('div');
+      ep.className = 'text-center py-6 text-xs text-ink-400';
+      ep.textContent = currentLang === 'km' ? 'មិនមានភារកិច្ច' : 'No tasks';
+      col.appendChild(ep);
+    }
+    cols[status].forEach(task => {
+      const card = document.createElement('div');
+      card.className = 'bg-white dark:bg-ink-800 rounded-xl p-3 border border-ink-100 dark:border-ink-700 cursor-pointer hover:shadow-md transition-shadow';
+      card.draggable = true;
+      card.dataset.id = task.id;
+      card.onclick = () => openViewTaskModal(task.id);
+      card.ondragstart = (e) => { draggingTaskId = task.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; };
+      card.ondragend = () => { card.classList.remove('dragging'); draggingTaskId = null; };
+      const title = highlight(task.title, searchQuery);
+      const desc = task.description ? highlight(task.description.substring(0,80), searchQuery) : '';
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-1 mb-1.5">
+          <p class="font-semibold text-sm leading-snug flex-1">${title}</p>
+          <span class="cat-pill px-1.5 py-0.5 rounded-full shrink-0 ${getCatColor(task.category)}">${tCat(task.category||'Other')}</span>
+        </div>
+        ${desc ? `<p class="text-xs text-ink-500 dark:text-ink-400 leading-relaxed mb-1.5">${desc}</p>` : ''}
+      `;
+      col.appendChild(card);
+    });
+  });
+
+  // Show/hide kanban empty
+  const total = tasks.length;
+  document.getElementById('kanban-empty').classList.toggle('hidden', total > 0);
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+function handleDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+function handleDrop(e, status) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (!draggingTaskId) return;
+  let tasks = getTasks().map(t => t.id == draggingTaskId ? { ...t, status } : t);
+  saveTasks(tasks);
+  renderKanban();
+}
+
+// ===================== RENDER ALL =====================
+function renderAll() {
+  applyTranslations();
+  updateAuthUI();
+  updateThemeUI();
+  updateLangUI();
+  if (currentMode === 'notes') renderNotes();
+  else renderKanban();
+  switchMode(currentMode);
+}
+
+// ===================== INIT =====================
+document.addEventListener('DOMContentLoaded', () => {
+  // Apply theme
+  document.documentElement.classList.toggle('dark', currentTheme === 'dark');
+
+  // Close modals on backdrop click
+  ['modal-login','modal-note','modal-kanban','modal-cats','modal-confirm'].forEach(id => {
+    document.getElementById(id).addEventListener('click', (e) => {
+      if (e.target === document.getElementById(id)) closeModal(id);
+    });
+  });
+
+  // Login on Enter
+  document.getElementById('login-password').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+  document.getElementById('login-username').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+  renderAll();
+});
+</script>
+</body>
+</html>
